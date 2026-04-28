@@ -1,0 +1,47 @@
+{
+  "version": 4,
+  "generatedAt": null,
+  "source": "public-state.json",
+  "selectedWeekStart": null,
+  "reference": {
+    "fileName": null,
+    "importedAt": null,
+    "rows": [],
+    "invalid": []
+  },
+  "upload": {
+    "fileName": null,
+    "importedAt": null,
+    "totalLines": 0,
+    "validLines": 0,
+    "invalidLines": 0,
+    "duplicatedLines": 0,
+    "rawContent": ""
+  },
+  "calendar": {
+    "entries": [],
+    "lastUpdatedAt": null
+  },
+  "weeklyReports": [],
+  "summaries": [],
+  "incidents": [],
+  "weekContext": {
+    "selectedWeekStart": null,
+    "selectedWeekEnd": null,
+    "availableWeeks": [],
+    "activeCalendarEntries": [],
+    "excludedExpectedMinutes": 0,
+    "workingDays": 0
+  },
+  "stats": {
+    "totalStudents": 0,
+    "meetsTarget": 0,
+    "belowTarget": 0,
+    "needsReview": 0,
+    "noDat": 0,
+    "noActivity": 0,
+    "calendarEvents": 0,
+    "excludedExpectedMinutes": 0,
+    "avgCompliancePercent": 0
+  }
+}

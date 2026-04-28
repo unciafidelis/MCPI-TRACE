@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Dashboard MCPI para GitHub Pages.">
+  <title>MCPI Trace · Dashboard</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegación principal">
+      <a href="dashboard.html" class="sidebar-brand" aria-label="MCPI Trace">
+        <img src="assets/img/logo.svg" alt="" class="brand-logo small">
+        <span>MCPI Trace</span>
+      </a>
+      <nav class="sidebar-nav">
+        <button class="nav-link active" data-view="overview">
+          <span class="material-symbols-rounded">dashboard</span>
+          Panel
+        </button>
+        <button class="nav-link coordinator-only" data-view="loads">
+          <span class="material-symbols-rounded">upload_file</span>
+          Carga de datos
+        </button>
+        <button class="nav-link coordinator-only" data-view="calendar">
+          <span class="material-symbols-rounded">event_busy</span>
+          Calendario
+        </button>
+        <button class="nav-link" data-view="students">
+          <span class="material-symbols-rounded">list_alt</span>
+          Lista de CVU
+        </button>
+        <button class="nav-link coordinator-only" data-view="incidents">
+          <span class="material-symbols-rounded">report</span>
+          Incidencias
+        </button>
+        <button class="nav-link" data-view="help">
+          <span class="material-symbols-rounded">help</span>
+          Ayuda
+        </button>
+      </nav>
+      <div class="sidebar-note">
+        <span class="material-symbols-rounded">info</span>
+        <p>Versión estática para GitHub Pages. Los datos cargados viven en el navegador hasta exportarlos.</p>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="mobileMenuButton" aria-label="Mostrar u ocultar menú">
+          <span class="material-symbols-rounded">menu</span>
+        </button>
+        <div>
+          <p class="eyebrow">Dashboard de asistencia</p>
+          <h1 id="screenTitle">Panel</h1>
+        </div>
+        <div class="topbar-actions">
+          <label class="week-picker">
+            <span>Semana</span>
+            <select id="weekSelector" aria-label="Seleccionar semana de seguimiento"></select>
+          </label>
+          <span id="roleBadge" class="role-badge">Rol</span>
+          <button class="ghost-button" id="logoutButton">
+            <span class="material-symbols-rounded">logout</span>
+            Salir
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="view active" id="view-overview" data-title="Panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Resumen semanal</p>
+              <h2>Estado general de cumplimiento</h2>
+            </div>
+            <div class="action-row compact">
+              <button class="secondary-action" id="refreshButton">
+                <span class="material-symbols-rounded">refresh</span>
+                Actualizar
+              </button>
+              <button class="secondary-action" id="printSummaryButton">
+                <span class="material-symbols-rounded">print</span>
+                Imprimir reporte
+              </button>
+            </div>
+          </div>
+
+          <div class="summary-grid" id="summaryCards"></div>
+
+          <article class="panel-card">
+            <div class="card-heading split">
+              <div>
+                <p class="eyebrow">Calendario aplicado</p>
+                <h3>Semana, días hábiles y descuentos de meta</h3>
+              </div>
+              <span class="pill neutral">Ajuste automático de horas esperadas</span>
+            </div>
+            <div id="weekContextPanel"></div>
+          </article>
+
+          <article class="panel-card">
+            <div class="card-heading split">
+              <div>
+                <p class="eyebrow">Lectura rápida</p>
+                <h3>Distribución de cumplimiento</h3>
+              </div>
+              <span id="dataSourceLabel" class="pill neutral">Sin datos cargados</span>
+            </div>
+            <div class="progress-stack" id="statusBars"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-loads" data-title="Carga de datos">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Coordinación</p>
+              <h2>Cargar tabla de referencia y archivo del checador</h2>
+            </div>
+            <button class="danger-action" id="resetDataButton">
+              <span class="material-symbols-rounded">delete</span>
+              Vaciar datos locales
+            </button>
+          </div>
+
+          <div class="two-column-grid">
+            <article class="panel-card upload-card">
+              <div class="card-heading">
+                <span class="icon-badge material-symbols-rounded">table_view</span>
+                <div>
+                  <p class="eyebrow">Paso 1</p>
+                  <h3>Tabla de referencia CSV</h3>
+                </div>
+              </div>
+              <p>Columnas requeridas: <code>CVU-CONACYT</code>, <code>Horas por semana</code>, <code>Lunes</code>, <code>Martes</code>, <code>Miercoles</code>, <code>Jueves</code>, <code>Viernes</code>, <code>Sabado</code>. Opcionales: <code>ID Checador</code>, <code>Estudiante</code>.</p>
+              <label class="file-drop">
+                <input id="referenceFile" type="file" accept=".csv,text/csv">
+                <span class="material-symbols-rounded">upload</span>
+                <strong>Seleccionar CSV</strong>
+                <small>La nueva carga reemplaza la referencia anterior.</small>
+              </label>
+              <div id="referenceResult" class="result-box muted">Sin CSV cargado.</div>
+            </article>
+
+            <article class="panel-card upload-card">
+              <div class="card-heading">
+                <span class="icon-badge material-symbols-rounded">fact_check</span>
+                <div>
+                  <p class="eyebrow">Paso 2</p>
+                  <h3>Archivo del checador .dat</h3>
+                </div>
+              </div>
+              <p>Se aceptan líneas separadas por coma, punto y coma, pipe, tabulación o espacios. Cada línea debe contener ID, fecha y hora; el tipo de evento es opcional.</p>
+              <label class="file-drop">
+                <input id="datFile" type="file" accept=".dat,.txt,text/plain">
+                <span class="material-symbols-rounded">upload_file</span>
+                <strong>Seleccionar .dat</strong>
+                <small>Solo existe un .dat activo; cada carga empalma y reemplaza la anterior. Sus fechas internas definen la semana o semanas evaluables.</small>
+              </label>
+              <div id="datResult" class="result-box muted">Sin .dat cargado. No hay semana evaluable.</div>
+            </article>
+          </div>
+
+          <article class="panel-card">
+            <div class="card-heading split">
+              <div>
+                <p class="eyebrow">Publicación estática</p>
+                <h3>Paquete público para GitHub Pages</h3>
+              </div>
+              <div class="action-row compact">
+                <button class="secondary-action" id="exportPublicStateButton">
+                  <span class="material-symbols-rounded">download</span>
+                  Exportar JSON público
+                </button>
+                <label class="secondary-action file-inline">
+                  <span class="material-symbols-rounded">upload</span>
+                  Importar JSON
+                  <input id="publicStateFile" type="file" accept=".json,application/json">
+                </label>
+              </div>
+            </div>
+            <p>Para que alumnado vea datos actualizados desde otro navegador, exporta el JSON, renómbralo como <code>public-state.json</code>, reemplázalo en la carpeta <code>data/</code> del repositorio y publica en GitHub Pages. El JSON público guarda reportes semanales ya calculados y no publica el contenido bruto del archivo <code>.dat</code>.</p>
+          </article>
+        </section>
+
+        <section class="view" id="view-calendar" data-title="Calendario institucional">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Coordinación</p>
+              <h2>Asuetos, días inhábiles y periodos vacacionales</h2>
+            </div>
+          </div>
+
+          <div class="two-column-grid calendar-layout">
+            <article class="panel-card">
+              <div class="card-heading">
+                <span class="icon-badge material-symbols-rounded">edit_calendar</span>
+                <div>
+                  <p class="eyebrow">Registro</p>
+                  <h3>Agregar evento de calendario</h3>
+                </div>
+              </div>
+              <form id="calendarForm" class="calendar-form">
+                <label class="field-group">
+                  <span>Tipo</span>
+                  <select id="calendarType" required>
+                    <option value="asueto">Día de asueto</option>
+                    <option value="inhabil">Día inhábil</option>
+                    <option value="vacacional">Periodo vacacional</option>
+                  </select>
+                </label>
+                <label class="field-group">
+                  <span>Fecha inicial</span>
+                  <input id="calendarStart" type="date" required>
+                </label>
+                <label class="field-group">
+                  <span>Fecha final</span>
+                  <input id="calendarEnd" type="date" required>
+                </label>
+                <label class="field-group full-span">
+                  <span>Nombre o descripción</span>
+                  <input id="calendarLabel" type="text" maxlength="80" placeholder="Ej. Semana Santa, suspensión institucional, día festivo">
+                  <small>Estas fechas descuentan automáticamente la meta esperada de cada CVU en la semana correspondiente.</small>
+                </label>
+                <button type="submit" class="primary-action full-span">
+                  <span class="material-symbols-rounded">add</span>
+                  Agregar al calendario
+                </button>
+              </form>
+            </article>
+
+            <article class="panel-card">
+              <div class="card-heading split">
+                <div>
+                  <p class="eyebrow">Calendario activo</p>
+                  <h3>Registros aplicados al seguimiento</h3>
+                </div>
+              </div>
+              <div id="calendarList" class="calendar-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-students" data-title="Lista de CVU">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Consulta</p>
+              <h2>CVU, estatus de horas y meta semanal</h2>
+            </div>
+            <div class="action-row compact coordinator-only">
+              <button class="secondary-action" id="exportCsvButton">
+                <span class="material-symbols-rounded">download</span>
+                Exportar CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="filter-bar">
+            <label class="search-field">
+              <span class="material-symbols-rounded">search</span>
+              <input id="searchInput" type="search" placeholder="Buscar CVU, nombre o ID checador">
+            </label>
+            <select id="statusFilter" aria-label="Filtrar por estatus">
+              <option value="">Todos los estatus</option>
+              <option value="Cumple">Cumple</option>
+              <option value="No cumple">No cumple</option>
+              <option value="Requiere revisión">Requiere revisión</option>
+              <option value="Sin DAT">Sin DAT</option>
+              <option value="Sin actividad">Sin actividad</option>
+            </select>
+          </div>
+
+          <div id="studentList" class="student-list"></div>
+        </section>
+
+        <section class="view" id="view-incidents" data-title="Incidencias">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Control operativo</p>
+              <h2>Incidencias detectadas</h2>
+            </div>
+          </div>
+          <div id="incidentList" class="incident-list"></div>
+        </section>
+
+        <section class="view" id="view-help" data-title="Ayuda">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Guía rápida</p>
+              <h2>Uso en GitHub Pages</h2>
+            </div>
+          </div>
+          <div class="help-grid">
+            <article class="panel-card">
+              <h3><span class="material-symbols-rounded">school</span> Alumno</h3>
+              <p>Entra con el rol Alumno. Solo visualiza la lista de CVU, las horas reales, la meta semanal ajustada, el detalle por día y el estatus calculado por semana.</p>
+            </article>
+            <article class="panel-card">
+              <h3><span class="material-symbols-rounded">admin_panel_settings</span> Coordinador</h3>
+              <p>Entra con rol Coordinador, carga el CSV de referencia, el archivo .dat, registra calendario institucional y exporta el JSON público para actualizar GitHub Pages.</p>
+            </article>
+            <article class="panel-card">
+              <h3><span class="material-symbols-rounded">calendar_month</span> Seguimiento semanal</h3>
+              <p>El sistema separa los marcajes por semana real, de lunes a domingo. La semana evaluada se determina por las fechas internas del archivo .dat, no por la fecha actual del usuario. La meta se calcula de lunes a sábado y se ajusta si hay asuetos, inhábiles o vacaciones.</p>
+            </article>
+            <article class="panel-card">
+              <h3><span class="material-symbols-rounded">security</span> Límite técnico</h3>
+              <p>GitHub Pages no ejecuta backend ni base de datos. La clave de coordinación es una barrera local básica, no autenticación real. Para seguridad institucional se requiere servidor o servicio externo.</p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="assets/js/dashboard.js"></script>
+</body>
+</html>

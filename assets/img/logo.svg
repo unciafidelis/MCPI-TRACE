@@ -1,0 +1,5 @@
+<svg width="148" height="36" viewBox="0 0 148 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="36" height="36" rx="10" fill="#2F80ED"/>
+  <path d="M10 18H14L17 11L21 25L25 14L28 18H32" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="46" y="23" fill="#2F80ED" font-family="Arial, sans-serif" font-size="21" font-weight="700">MCPI Trace</text>
+</svg>
