@@ -10,6 +10,7 @@ const coordinatorKeyGroup = document.querySelector('#coordinatorKeyGroup');
 const coordinatorKey = document.querySelector('#coordinatorKey');
 const loginAlert = document.querySelector('#loginAlert');
 const roleCards = [...document.querySelectorAll('[data-role-card]')];
+const roleInputs = [...document.querySelectorAll('input[name="role"]')];
 const submitButton = document.querySelector('#submitLoginButton');
 const togglePasswordButton = document.querySelector('#togglePasswordButton');
 const coordinatorSecurityHint = document.querySelector('#coordinatorSecurityHint');
@@ -23,15 +24,18 @@ function setSubmitState(isLoading) {
   if (!submitButton) return;
   submitButton.disabled = isLoading;
   submitButton.classList.toggle('is-loading', isLoading);
-  submitButton.querySelector('[data-login-label]').textContent = isLoading ? 'Validando acceso' : 'Entrar al sistema';
+  const label = submitButton.querySelector('[data-login-label]');
+  if (label) label.textContent = isLoading ? 'Validando acceso' : 'Entrar al sistema';
 }
 
 function showAlert(message, type = 'danger') {
+  if (!loginAlert) return;
   loginAlert.textContent = message;
   loginAlert.className = `alert ${type}`;
 }
 
 function hideAlert() {
+  if (!loginAlert) return;
   loginAlert.className = 'alert hidden';
   loginAlert.textContent = '';
 }
@@ -53,33 +57,66 @@ function updateCoordinatorHint() {
   coordinatorSecurityHint.classList.toggle('danger-text', attempts > 0);
 }
 
+function setCoordinatorFieldState(isCoordinator) {
+  if (!coordinatorKeyGroup || !coordinatorKey) return;
+
+  coordinatorKeyGroup.classList.toggle('hidden', !isCoordinator);
+  coordinatorKeyGroup.setAttribute('aria-hidden', String(!isCoordinator));
+
+  coordinatorKey.disabled = !isCoordinator;
+  coordinatorKey.required = isCoordinator;
+  coordinatorKey.setAttribute('aria-required', String(isCoordinator));
+
+  if (!isCoordinator) {
+    coordinatorKey.value = '';
+    coordinatorKey.setCustomValidity('');
+    coordinatorKey.blur();
+  }
+
+  if (togglePasswordButton) {
+    togglePasswordButton.disabled = !isCoordinator;
+    togglePasswordButton.setAttribute('aria-hidden', String(!isCoordinator));
+  }
+}
+
 function renderRoleState() {
   const role = selectedRole();
+  const isCoordinator = role === 'coordinador';
+
   roleCards.forEach((card) => {
     card.classList.toggle('active', card.dataset.roleCard === role);
   });
-  coordinatorKeyGroup.classList.toggle('hidden', role !== 'coordinador');
-  if (role !== 'coordinador') coordinatorKey.value = '';
-  if (role === 'coordinador') updateCoordinatorHint();
+
+  setCoordinatorFieldState(isCoordinator);
+  if (isCoordinator) updateCoordinatorHint();
 }
 
 roleCards.forEach((card) => {
   card.addEventListener('click', () => {
     const input = card.querySelector('input[type="radio"]');
+    if (!input) return;
     input.checked = true;
     hideAlert();
     renderRoleState();
   });
 });
 
+roleInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    hideAlert();
+    renderRoleState();
+  });
+});
+
 togglePasswordButton?.addEventListener('click', () => {
+  if (!coordinatorKey || coordinatorKey.disabled) return;
   const isPassword = coordinatorKey.type === 'password';
   coordinatorKey.type = isPassword ? 'text' : 'password';
   togglePasswordButton.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
   togglePasswordButton.querySelector('.material-symbols-rounded').textContent = isPassword ? 'visibility_off' : 'visibility';
 });
 
-loginForm.addEventListener('submit', async (event) => {
+loginForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   hideAlert();
   const role = selectedRole();
@@ -88,10 +125,19 @@ loginForm.addEventListener('submit', async (event) => {
     setSubmitState(true);
 
     if (role === 'coordinador') {
-      const result = await verifyCoordinatorPassword(coordinatorKey.value);
+      const password = coordinatorKey?.value?.trim() || '';
+
+      if (!password) {
+        showAlert('Ingresa la contraseña de coordinación para continuar.', 'warning');
+        coordinatorKey?.focus();
+        return;
+      }
+
+      const result = await verifyCoordinatorPassword(password);
       if (!result.ok) {
         showAlert(result.message, result.locked ? 'danger' : 'warning');
         updateCoordinatorHint();
+        coordinatorKey?.focus();
         return;
       }
     }
