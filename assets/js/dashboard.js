@@ -1,4 +1,5 @@
 import { CALENDAR_TYPES, DAY_LABELS, DEFAULT_STATE } from './constants.js';
+import { getSessionExpirationLabel, isSessionActive } from './authService.js';
 import { parseReferenceCsv } from './csvService.js';
 import { recomputeState, selectWeekFromStoredReports } from './attendanceService.js';
 import {
@@ -48,7 +49,8 @@ const calendarEnd = document.querySelector('#calendarEnd');
 const calendarLabel = document.querySelector('#calendarLabel');
 
 function assertSession() {
-  if (!session?.role) {
+  if (!isSessionActive(session)) {
+    clearSession();
     window.location.href = './index.html';
     return false;
   }
@@ -56,7 +58,7 @@ function assertSession() {
 }
 
 function isCoordinator() {
-  return session?.role === 'coordinador';
+  return isSessionActive(session) && session.role === 'coordinador';
 }
 
 function setResult(element, message, type = 'muted') {
@@ -78,6 +80,7 @@ function setView(viewName) {
 function initializeRoleMode() {
   document.body.classList.toggle('student-mode', !isCoordinator());
   roleBadge.textContent = isCoordinator() ? 'Coordinación' : 'Alumno';
+  roleBadge.title = `Sesión válida hasta ${getSessionExpirationLabel(session)}`;
   if (!isCoordinator()) setView('students');
 }
 
