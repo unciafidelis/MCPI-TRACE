@@ -1157,7 +1157,7 @@ body.student-mode .coordinator-only {
 }
 
 .day-card-head em {
-  max-width: 56%;
+  max-width: 66%;
   border-radius: 999px;
   padding: 0.14rem 0.42rem;
   background: var(--surface-strong);
@@ -1212,6 +1212,26 @@ body.student-mode .coordinator-only {
   background: var(--review-soft);
   color: var(--review);
 }
+
+.day-cell.ingreso-completado:not(.has-incident) .day-card-head em {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.day-cell.ingreso-incompleto .day-card-head em,
+.day-cell.salida-faltante .day-card-head em,
+.day-cell.entrada-faltante .day-card-head em,
+.day-cell.doble-entrada .day-card-head em,
+.day-cell.doble-salida .day-card-head em,
+.day-cell.tipo-dat-no-reconocido .day-card-head em {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.day-cell.ingreso-incompleto:not(.has-incident) .day-card-face {
+  border-color: rgba(201, 54, 54, 0.32);
+}
+
 
 .day-cell.no-registers:not(.non-working) .day-card-face {
   background: #f8fafc;

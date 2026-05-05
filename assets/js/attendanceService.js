@@ -20,7 +20,7 @@ function formatClockTime(value) {
 function eventTypeLabel(eventType) {
   if (eventType === 'in') return 'Entrada';
   if (eventType === 'out') return 'Salida';
-  return 'No identificado';
+  return 'Tipo DAT no reconocido';
 }
 
 function emptyDailyAttendance() {
@@ -32,7 +32,12 @@ function emptyDailyAttendance() {
     exitTime: null,
     eventCount: 0,
     events: [],
-    calculationRule: 'Sin registros del día.'
+    calculationRule: 'Sin registros del día.',
+    hasCompleteEntryExit: false,
+    inconsistencyLabels: [],
+    dailyAttendanceType: 'Sin registro',
+    dailyStatusLabel: 'Sin registro',
+    dailyStatusCode: 'sin-registro'
   };
 }
 
@@ -58,17 +63,32 @@ function uniqueMessages(messages) {
   return [...new Set(messages.filter(Boolean))];
 }
 
-function buildDailyResult({ minutes = 0, incidentType = null, messages = [], entryEvent = null, exitEvent = null, events = [], calculationRule = '' }) {
+function buildDailyResult({
+  minutes = 0,
+  incidentType = null,
+  messages = [],
+  entryEvent = null,
+  exitEvent = null,
+  events = [],
+  calculationRule = '',
+  hasCompleteEntryExit = false,
+  inconsistencyLabels = []
+}) {
   const normalizedMessages = uniqueMessages(messages);
+  const normalizedIssues = uniqueMessages(inconsistencyLabels);
+  const completePair = Boolean(hasCompleteEntryExit || (entryEvent && exitEvent));
+
   return {
     minutes: Math.max(0, Math.round(minutes)),
-    incidentType: incidentType || (normalizedMessages.length ? 'Secuencia con ajuste' : null),
+    incidentType: incidentType || (normalizedMessages.length ? 'Completado con inconsistencia' : null),
     message: normalizedMessages.join(' '),
     entryTime: entryEvent?.eventTime || null,
     exitTime: exitEvent?.eventTime || null,
     eventCount: events.length,
     events,
-    calculationRule
+    calculationRule,
+    hasCompleteEntryExit: completePair,
+    inconsistencyLabels: normalizedIssues
   };
 }
 
@@ -76,10 +96,11 @@ function calculateUntypedDailyAttendance(events) {
   if (events.length < 2) {
     return buildDailyResult({
       minutes: 0,
-      incidentType: 'Registro incompleto',
-      messages: ['Existe un solo marcaje sin tipo de entrada/salida; el día queda en 0 horas.'],
+      incidentType: 'Tipo DAT no reconocido',
+      messages: ['El .dat no permite identificar entrada/salida y solo existe un marcaje; el día queda en 0 horas.'],
       events,
-      calculationRule: 'Sin par entrada/salida interpretable.'
+      calculationRule: 'Sin par entrada/salida interpretable.',
+      inconsistencyLabels: ['Tipo DAT no reconocido']
     });
   }
 
@@ -92,22 +113,25 @@ function calculateUntypedDailyAttendance(events) {
     return buildDailyResult({
       minutes: 0,
       incidentType: 'Secuencia no interpretable',
-      messages: ['Los marcajes no tienen una salida posterior a la entrada asumida; el día queda en 0 horas.'],
+      messages: ['El .dat no especifica entrada/salida y el último marcaje no es posterior al primero; el día queda en 0 horas.'],
       entryEvent: firstEvent,
       exitEvent: lastEvent,
       events,
-      calculationRule: 'No fue posible inferir entrada y salida.'
+      calculationRule: 'No fue posible inferir entrada y salida con orden horario válido.',
+      inconsistencyLabels: ['Tipo DAT no reconocido']
     });
   }
 
   return buildDailyResult({
     minutes: endMinutes - startMinutes,
-    incidentType: 'Tipo no reconocido',
-    messages: ['El .dat no especifica entrada/salida; se asumió el primer registro como entrada y el último como salida.'],
+    incidentType: 'Completado con inconsistencia',
+    messages: ['Tipo DAT no reconocido: el archivo no especifica entrada/salida; se asumió el primer registro como entrada y el último como salida.'],
     entryEvent: firstEvent,
     exitEvent: lastEvent,
     events,
-    calculationRule: 'Primer marcaje del día contra último marcaje del día por falta de tipo explícito.'
+    calculationRule: 'Primer marcaje del día contra último marcaje del día por falta de tipo explícito.',
+    hasCompleteEntryExit: true,
+    inconsistencyLabels: ['Tipo DAT no reconocido']
   });
 }
 
@@ -125,17 +149,21 @@ function calculateDailyAttendance(dayEvents) {
   const entries = typedEvents.filter((event) => event.eventType === 'in');
   const exits = typedEvents.filter((event) => event.eventType === 'out');
   const messages = [];
+  const inconsistencyLabels = [];
 
   if (unknownEvents.length) {
-    messages.push('Hay marcajes con tipo no identificado; no se usaron para cerrar la jornada.');
+    messages.push('Hay marcajes con tipo DAT no reconocido; no se usaron para cerrar la jornada.');
+    inconsistencyLabels.push('Tipo DAT no reconocido');
   }
 
-  if (hasConsecutiveType(typedEvents, 'in')) {
-    messages.push('Doble entrada consecutiva detectada.');
+  if (hasConsecutiveType(typedEvents, 'in') || entries.length > 1) {
+    messages.push('Doble entrada detectada.');
+    inconsistencyLabels.push('Doble entrada');
   }
 
-  if (hasConsecutiveType(typedEvents, 'out')) {
-    messages.push('Doble salida consecutiva detectada.');
+  if (hasConsecutiveType(typedEvents, 'out') || exits.length > 1) {
+    messages.push('Doble salida detectada.');
+    inconsistencyLabels.push('Doble salida');
   }
 
   if (entries.length && exits.length) {
@@ -146,10 +174,12 @@ function calculateDailyAttendance(dayEvents) {
 
     if (typedEvents[0].eventType === 'out') {
       messages.push('Existe una salida antes de la primera entrada válida; se ignora para el conteo.');
+      inconsistencyLabels.push('Entrada faltante inicial');
     }
 
     if (typedEvents[typedEvents.length - 1].eventType === 'in') {
       messages.push('Existe una entrada sin salida posterior; no se usa para cerrar la jornada.');
+      inconsistencyLabels.push('Salida faltante final');
     }
 
     if (entries.length > 1) {
@@ -168,18 +198,22 @@ function calculateDailyAttendance(dayEvents) {
         entryEvent: firstEntry,
         exitEvent: lastExit,
         events,
-        calculationRule: 'Entrada y salida detectadas, pero con orden horario inválido.'
+        calculationRule: 'Entrada y salida detectadas, pero con orden horario inválido.',
+        hasCompleteEntryExit: false,
+        inconsistencyLabels: [...inconsistencyLabels, 'Orden horario inválido']
       });
     }
 
     return buildDailyResult({
       minutes: endMinutes - startMinutes,
-      incidentType: messages.length ? 'Secuencia con ajuste' : null,
+      incidentType: inconsistencyLabels.length ? 'Completado con inconsistencia' : null,
       messages,
       entryEvent: firstEntry,
       exitEvent: lastExit,
       events,
-      calculationRule: 'Primera entrada real contra última salida real del día.'
+      calculationRule: 'Primera entrada real contra última salida real del día.',
+      hasCompleteEntryExit: true,
+      inconsistencyLabels
     });
   }
 
@@ -187,34 +221,38 @@ function calculateDailyAttendance(dayEvents) {
     const isDoubleEntry = entries.length > 1;
     return buildDailyResult({
       minutes: 0,
-      incidentType: isDoubleEntry ? 'Doble entrada' : 'Omisión de salida',
+      incidentType: isDoubleEntry ? 'Doble entrada' : 'Salida faltante',
       messages: [
         ...messages,
         isDoubleEntry
-          ? 'Solo hay entradas registradas y no existe salida; el día queda en 0 horas.'
-          : 'Existe entrada registrada, pero se omitió la salida; el día queda en 0 horas.'
+          ? 'Solo hay entradas registradas y no existe salida; el día queda en 0 horas por doble entrada sin salida.'
+          : 'Existe entrada registrada, pero la salida está faltante; el día queda en 0 horas.'
       ],
       entryEvent: entries[0],
       exitEvent: null,
       events,
-      calculationRule: 'Sin salida válida para cerrar la jornada.'
+      calculationRule: 'Sin salida válida para cerrar la jornada.',
+      hasCompleteEntryExit: false,
+      inconsistencyLabels: [isDoubleEntry ? 'Doble entrada' : 'Salida faltante']
     });
   }
 
   const isDoubleExit = exits.length > 1;
   return buildDailyResult({
     minutes: 0,
-    incidentType: isDoubleExit ? 'Doble salida' : 'Omisión de entrada',
+    incidentType: isDoubleExit ? 'Doble salida' : 'Entrada faltante',
     messages: [
       ...messages,
       isDoubleExit
-        ? 'Solo hay salidas registradas y no existe entrada; el día queda en 0 horas.'
-        : 'Existe salida registrada, pero se omitió la entrada; el día queda en 0 horas.'
+        ? 'Solo hay salidas registradas y no existe entrada; el día queda en 0 horas por doble salida sin entrada.'
+        : 'Existe salida registrada, pero la entrada está faltante; el día queda en 0 horas.'
     ],
     entryEvent: null,
     exitEvent: exits[exits.length - 1] || null,
     events,
-    calculationRule: 'Sin entrada válida para abrir la jornada.'
+    calculationRule: 'Sin entrada válida para abrir la jornada.',
+    hasCompleteEntryExit: false,
+    inconsistencyLabels: [isDoubleExit ? 'Doble salida' : 'Entrada faltante']
   });
 }
 
@@ -317,6 +355,12 @@ function buildMissingDatSummaries(referenceRows = [], hasDatFile = false) {
       dailyIncidentType: null,
       dailyIncidentMessage: null,
       calculationRule: 'Sin registros del día.',
+      hasCompleteEntryExit: false,
+      inconsistencyLabels: [],
+      dailyAttendanceType: 'Sin registro',
+      dailyStatusLabel: 'Sin registro',
+      dailyStatusCode: 'sin-registro',
+      dailyInconsistencyLabel: null,
       isNonWorking: false,
       calendarType: null,
       calendarLabel: null
@@ -349,6 +393,82 @@ function buildMissingDatSummaries(referenceRows = [], hasDatFile = false) {
       varianceLabel: minutesToReadable(-baseExpectedTotalMinutes)
     };
   });
+}
+
+function normalizeStatusIssueLabel(label) {
+  const value = String(label || '').trim();
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+
+  if (normalized.includes('doble entrada')) return 'doble entrada';
+  if (normalized.includes('doble salida')) return 'doble salida';
+  if (normalized.includes('salida faltante')) return 'salida faltante';
+  if (normalized.includes('entrada faltante')) return 'entrada faltante';
+  if (normalized.includes('tipo dat')) return 'tipo DAT no reconocido';
+  if (normalized.includes('orden horario')) return 'orden horario inválido';
+  if (normalized.includes('entrada sin salida')) return 'salida faltante';
+  if (normalized.includes('salida antes')) return 'entrada faltante inicial';
+
+  return value;
+}
+
+function statusCodeFromLabel(label) {
+  const normalized = String(label || '').toLowerCase();
+  if (normalized.includes('ingreso completado')) return 'ingreso-completado';
+  if (normalized.includes('ingreso incompleto')) return 'ingreso-incompleto';
+  if (normalized.includes('doble entrada')) return 'doble-entrada';
+  if (normalized.includes('doble salida')) return 'doble-salida';
+  if (normalized.includes('salida faltante')) return 'salida-faltante';
+  if (normalized.includes('entrada faltante')) return 'entrada-faltante';
+  if (normalized.includes('tipo dat')) return 'tipo-dat-no-reconocido';
+  if (normalized.includes('no laborable')) return 'no-laborable';
+  return 'sin-registro';
+}
+
+function classifyDailyAttendance(dailyResult, expectedMinutes, isNonWorking = false) {
+  const eventCount = dailyResult.eventCount || 0;
+  const hasCompleteEntryExit = Boolean(dailyResult.hasCompleteEntryExit && dailyResult.entryTime && dailyResult.exitTime);
+  const issueLabels = uniqueMessages([
+    ...(dailyResult.inconsistencyLabels || []),
+    dailyResult.incidentType
+  ].map(normalizeStatusIssueLabel));
+  const visibleIssues = issueLabels.filter((label) => !['Completado con inconsistencia', 'Secuencia con ajuste'].includes(label));
+
+  if (!eventCount) {
+    const label = isNonWorking ? 'No laborable' : 'Sin registro';
+    return {
+      dailyAttendanceType: label,
+      dailyStatusLabel: label,
+      dailyStatusCode: statusCodeFromLabel(label),
+      dailyInconsistencyLabel: null
+    };
+  }
+
+  if (hasCompleteEntryExit) {
+    const requiredMinutes = Math.max(expectedMinutes || 0, 0);
+    const baseType = requiredMinutes > 0 && dailyResult.minutes < requiredMinutes
+      ? 'Ingreso incompleto'
+      : 'Ingreso completado';
+    const issueSuffix = visibleIssues.length
+      ? ` · completado con inconsistencia: ${visibleIssues.join(', ')}`
+      : '';
+    const label = `${baseType}${issueSuffix}`;
+
+    return {
+      dailyAttendanceType: baseType,
+      dailyStatusLabel: label,
+      dailyStatusCode: statusCodeFromLabel(baseType),
+      dailyInconsistencyLabel: visibleIssues.join(', ') || null
+    };
+  }
+
+  const fallbackLabel = visibleIssues[0] || normalizeStatusIssueLabel(dailyResult.incidentType) || 'Registro incompleto';
+  return {
+    dailyAttendanceType: fallbackLabel,
+    dailyStatusLabel: fallbackLabel,
+    dailyStatusCode: statusCodeFromLabel(fallbackLabel),
+    dailyInconsistencyLabel: visibleIssues.join(', ') || fallbackLabel
+  };
 }
 
 function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, weekStart, fileName }) {
@@ -423,6 +543,7 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
       const expectedMinutes = calendarEntry ? 0 : baseExpectedMinutes;
       const dailyResult = realDailyDetails[dayKey] || emptyDailyAttendance();
       const realMinutes = dailyResult.minutes || 0;
+      const dailyClassification = classifyDailyAttendance(dailyResult, expectedMinutes, Boolean(calendarEntry));
       adjustedExpectedWeek[dayKey] = expectedMinutes;
       excludedExpectedMinutes += Math.max(baseExpectedMinutes - expectedMinutes, 0);
 
@@ -452,6 +573,12 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
         dailyIncidentType: dailyResult.incidentType || null,
         dailyIncidentMessage: dailyResult.message || null,
         calculationRule: dailyResult.calculationRule || 'Sin registros del día.',
+        hasCompleteEntryExit: Boolean(dailyResult.hasCompleteEntryExit),
+        inconsistencyLabels: dailyResult.inconsistencyLabels || [],
+        dailyAttendanceType: dailyClassification.dailyAttendanceType,
+        dailyStatusLabel: dailyClassification.dailyStatusLabel,
+        dailyStatusCode: dailyClassification.dailyStatusCode,
+        dailyInconsistencyLabel: dailyClassification.dailyInconsistencyLabel,
         isNonWorking: Boolean(calendarEntry),
         calendarType: calendarEntry?.type || null,
         calendarLabel: calendarEntry?.label || null

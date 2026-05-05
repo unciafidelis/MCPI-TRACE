@@ -235,15 +235,17 @@ function formatClock(value) {
 
 function dayCellClass(day) {
   const classes = ['day-cell', 'day-flip'];
+  if (day.dailyStatusCode) classes.push(day.dailyStatusCode);
   if (day.isNonWorking) classes.push('non-working');
-  if (day.dailyIncidentType) classes.push('has-incident');
+  if (day.dailyIncidentType || day.dailyInconsistencyLabel) classes.push('has-incident');
   if (!day.eventCount) classes.push('no-registers');
   return classes.join(' ');
 }
 
 function dayStatusLabel(day) {
+  if (day.dailyStatusLabel) return day.dailyStatusLabel;
   if (day.dailyIncidentType) return day.dailyIncidentType;
-  if (day.eventCount > 0) return 'Registro válido';
+  if (day.eventCount > 0) return 'Ingreso completado';
   if (day.isNonWorking) return 'No laborable';
   return 'Sin registro';
 }
@@ -252,7 +254,7 @@ function renderEventTimeline(events = []) {
   if (!events.length) return '<span class="day-event-empty">Sin marcajes registrados</span>';
   return events.map((event) => `
     <span class="day-event-pill ${escapeHtml(event.eventType || 'unknown')}">
-      ${escapeHtml(event.displayTime || formatClock(event.eventTime))} · ${escapeHtml(event.eventLabel || 'No identificado')}
+      ${escapeHtml(event.displayTime || formatClock(event.eventTime))} · ${escapeHtml(event.eventLabel || 'Tipo DAT no reconocido')}
     </span>
   `).join('');
 }
@@ -280,9 +282,11 @@ function renderDayCard(day) {
             <strong>Detalle real</strong>
             <em>${escapeHtml(minutesToReadable(day.realMinutes))}</em>
           </span>
+          <small>Tipo: ${escapeHtml(day.dailyAttendanceType || statusLabel)}</small>
           <small>Entrada: ${escapeHtml(formatClock(day.entryTime))}</small>
           <small>Salida: ${escapeHtml(formatClock(day.exitTime))}</small>
           <small>Marcajes: ${escapeHtml(day.eventCount || 0)}</small>
+          ${day.dailyInconsistencyLabel ? `<mark>${escapeHtml(day.dailyInconsistencyLabel)}</mark>` : ''}
           <span class="day-rule">${escapeHtml(day.calculationRule || 'Sin regla aplicada.')}</span>
           <span class="day-events">${renderEventTimeline(day.events)}</span>
           ${incident ? `<b class="day-alert">${escapeHtml(incident)}</b>` : ''}
