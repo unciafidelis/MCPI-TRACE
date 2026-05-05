@@ -250,6 +250,22 @@ function dayStatusLabel(day) {
   return 'Sin registro';
 }
 
+function compactDayStatusLabel(label = '') {
+  const normalized = String(label || '').toLowerCase();
+  if (normalized.includes('completado') && normalized.includes('inconsistencia')) return 'Completo · inc.';
+  if (normalized.includes('incompleto') && normalized.includes('inconsistencia')) return 'Incompleto · inc.';
+  if (normalized.includes('ingreso completado')) return 'Completo';
+  if (normalized.includes('ingreso incompleto')) return 'Incompleto';
+  if (normalized.includes('doble entrada')) return 'Doble entrada';
+  if (normalized.includes('doble salida')) return 'Doble salida';
+  if (normalized.includes('salida faltante')) return 'Salida faltante';
+  if (normalized.includes('entrada faltante')) return 'Entrada faltante';
+  if (normalized.includes('tipo dat')) return 'DAT inválido';
+  if (normalized.includes('no laborable')) return 'No laborable';
+  if (normalized.includes('sin registro')) return 'Sin registro';
+  return String(label || 'Estado').trim();
+}
+
 function renderEventTimeline(events = []) {
   if (!events.length) return '<span class="day-event-empty">Sin marcajes registrados</span>';
   return events.map((event) => `
@@ -261,6 +277,7 @@ function renderEventTimeline(events = []) {
 
 function renderDayCard(day) {
   const statusLabel = dayStatusLabel(day);
+  const compactStatus = compactDayStatusLabel(statusLabel);
   const incident = day.dailyIncidentMessage || (day.eventCount ? '' : 'No hay marcajes registrados para este día.');
 
   return `
@@ -269,7 +286,7 @@ function renderDayCard(day) {
         <span class="day-card-face day-card-front">
           <span class="day-card-head">
             <strong>${escapeHtml(day.dayLabel)}</strong>
-            <em>${escapeHtml(statusLabel)}</em>
+            <em title="${escapeHtml(statusLabel)}">${escapeHtml(compactStatus)}</em>
           </span>
           <small>${escapeHtml(formatDateShort(day.date))}</small>
           <span>Real: ${escapeHtml(minutesToReadable(day.realMinutes))}</span>
@@ -279,13 +296,17 @@ function renderDayCard(day) {
         </span>
         <span class="day-card-face day-card-back">
           <span class="day-card-head">
-            <strong>Detalle real</strong>
+            <strong>${escapeHtml(day.dayLabel)} · ${escapeHtml(formatDateShort(day.date))}</strong>
             <em>${escapeHtml(minutesToReadable(day.realMinutes))}</em>
           </span>
-          <small>Tipo: ${escapeHtml(day.dailyAttendanceType || statusLabel)}</small>
-          <small>Entrada: ${escapeHtml(formatClock(day.entryTime))}</small>
-          <small>Salida: ${escapeHtml(formatClock(day.exitTime))}</small>
-          <small>Marcajes: ${escapeHtml(day.eventCount || 0)}</small>
+          <small class="day-full-status">Estatus completo: ${escapeHtml(statusLabel)}</small>
+          <small>Tipo operativo: ${escapeHtml(day.dailyAttendanceType || statusLabel)}</small>
+          <small>Entrada real: ${escapeHtml(formatClock(day.entryTime))}</small>
+          <small>Salida real: ${escapeHtml(formatClock(day.exitTime))}</small>
+          <small>Horas registradas: ${escapeHtml(minutesToReadable(day.realMinutes))}</small>
+          <small>Horas base del día: ${escapeHtml(minutesToReadable(day.expectedMinutes))}</small>
+          <small>Marcajes del día: ${escapeHtml(day.eventCount || 0)}</small>
+          ${day.isNonWorking ? `<mark>${escapeHtml(day.calendarLabel)}</mark>` : ''}
           ${day.dailyInconsistencyLabel ? `<mark>${escapeHtml(day.dailyInconsistencyLabel)}</mark>` : ''}
           <span class="day-rule">${escapeHtml(day.calculationRule || 'Sin regla aplicada.')}</span>
           <span class="day-events">${renderEventTimeline(day.events)}</span>

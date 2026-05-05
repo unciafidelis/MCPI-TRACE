@@ -1089,6 +1089,7 @@ body.student-mode .coordinator-only {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.65rem;
+  align-items: start;
 }
 
 .day-cell {
@@ -1112,8 +1113,23 @@ body.student-mode .coordinator-only {
   transition: transform 0.52s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+.day-cell.is-flipped {
+  grid-column: span 2;
+  min-height: 340px;
+  z-index: 4;
+}
+
 .day-cell.is-flipped .day-card-inner {
+  min-height: 340px;
   transform: rotateY(180deg);
+}
+
+.day-cell.is-flipped .day-card-face {
+  min-height: 340px;
+}
+
+.day-cell.is-flipped .day-card-back {
+  overflow: visible;
 }
 
 .day-cell:focus-visible {
@@ -1157,16 +1173,28 @@ body.student-mode .coordinator-only {
 }
 
 .day-card-head em {
-  max-width: 66%;
+  max-width: 58%;
   border-radius: 999px;
-  padding: 0.14rem 0.42rem;
+  padding: 0.08rem 0.28rem;
   background: var(--surface-strong);
   color: var(--text-soft);
-  font-size: 0.64rem;
+  font-size: 0.5rem;
   font-style: normal;
   font-weight: 900;
-  line-height: 1.15;
+  line-height: 1.08;
   text-align: right;
+  letter-spacing: 0.01em;
+}
+
+.day-card-front .day-card-head em {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.day-card-back .day-card-head em {
+  max-width: 44%;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.66rem;
 }
 
 .day-card-face small,
@@ -1242,6 +1270,33 @@ body.student-mode .coordinator-only {
   padding: 0.35rem 0;
   color: var(--text);
   font-weight: 800;
+}
+
+.day-full-status {
+  display: block;
+  color: var(--text) !important;
+  font-weight: 900;
+}
+
+.day-alert {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--danger) !important;
+  font-weight: 900;
+}
+
+.day-cell.is-flipped .day-card-back {
+  gap: 0.34rem;
+  padding: 1rem;
+}
+
+.day-cell.is-flipped .day-card-face small,
+.day-cell.is-flipped .day-card-face span,
+.day-cell.is-flipped .day-card-face i,
+.day-cell.is-flipped .day-card-face mark,
+.day-cell.is-flipped .day-card-face b {
+  font-size: 0.82rem;
+  line-height: 1.34;
 }
 
 .day-events {
@@ -1336,6 +1391,10 @@ body.student-mode .coordinator-only {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .day-cell.is-flipped {
+    grid-column: span 2;
+  }
+
   .week-context-grid {
     grid-template-columns: 1fr;
   }
@@ -1354,6 +1413,16 @@ body.student-mode .coordinator-only {
 @media (max-width: 640px) {
   .day-grid {
     grid-template-columns: 1fr;
+  }
+
+  .day-cell.is-flipped {
+    grid-column: span 1;
+    min-height: 520px;
+  }
+
+  .day-cell.is-flipped .day-card-inner,
+  .day-cell.is-flipped .day-card-face {
+    min-height: 520px;
   }
 
   .week-picker {
