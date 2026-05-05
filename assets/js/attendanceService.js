@@ -20,7 +20,7 @@ function formatClockTime(value) {
 function eventTypeLabel(eventType) {
   if (eventType === 'in') return 'Entrada';
   if (eventType === 'out') return 'Salida';
-  return 'Tipo DAT no reconocido';
+  return 'Registro';
 }
 
 function emptyDailyAttendance() {
@@ -96,11 +96,14 @@ function calculateUntypedDailyAttendance(events) {
   if (events.length < 2) {
     return buildDailyResult({
       minutes: 0,
-      incidentType: 'Tipo DAT no reconocido',
-      messages: ['El .dat no permite identificar entrada/salida y solo existe un marcaje; el día queda en 0 horas.'],
+      incidentType: 'Salida faltante',
+      messages: ['Solo existe un marcaje en el día; no hay par entrada/salida para cerrar el ingreso.'],
+      entryEvent: events[0] || null,
+      exitEvent: null,
       events,
-      calculationRule: 'Sin par entrada/salida interpretable.',
-      inconsistencyLabels: ['Tipo DAT no reconocido']
+      calculationRule: 'Un solo marcaje no permite cerrar la jornada.',
+      hasCompleteEntryExit: false,
+      inconsistencyLabels: ['Salida faltante']
     });
   }
 
@@ -112,26 +115,27 @@ function calculateUntypedDailyAttendance(events) {
   if (endMinutes <= startMinutes) {
     return buildDailyResult({
       minutes: 0,
-      incidentType: 'Secuencia no interpretable',
-      messages: ['El .dat no especifica entrada/salida y el último marcaje no es posterior al primero; el día queda en 0 horas.'],
+      incidentType: 'Orden horario inválido',
+      messages: ['El último marcaje no es posterior al primero; el día queda en 0 horas.'],
       entryEvent: firstEvent,
       exitEvent: lastEvent,
       events,
-      calculationRule: 'No fue posible inferir entrada y salida con orden horario válido.',
-      inconsistencyLabels: ['Tipo DAT no reconocido']
+      calculationRule: 'No fue posible cerrar la jornada por orden horario inválido.',
+      hasCompleteEntryExit: false,
+      inconsistencyLabels: ['Orden horario inválido']
     });
   }
 
   return buildDailyResult({
     minutes: endMinutes - startMinutes,
-    incidentType: 'Completado con inconsistencia',
-    messages: ['Tipo DAT no reconocido: el archivo no especifica entrada/salida; se asumió el primer registro como entrada y el último como salida.'],
+    incidentType: null,
+    messages: [],
     entryEvent: firstEvent,
     exitEvent: lastEvent,
     events,
-    calculationRule: 'Primer marcaje del día contra último marcaje del día por falta de tipo explícito.',
+    calculationRule: 'Primer marcaje del día contra último marcaje del día.',
     hasCompleteEntryExit: true,
-    inconsistencyLabels: ['Tipo DAT no reconocido']
+    inconsistencyLabels: []
   });
 }
 
@@ -150,11 +154,6 @@ function calculateDailyAttendance(dayEvents) {
   const exits = typedEvents.filter((event) => event.eventType === 'out');
   const messages = [];
   const inconsistencyLabels = [];
-
-  if (unknownEvents.length) {
-    messages.push('Hay marcajes con tipo DAT no reconocido; no se usaron para cerrar la jornada.');
-    inconsistencyLabels.push('Tipo DAT no reconocido');
-  }
 
   if (hasConsecutiveType(typedEvents, 'in') || entries.length > 1) {
     messages.push('Doble entrada detectada.');
@@ -400,14 +399,13 @@ function normalizeStatusIssueLabel(label) {
   if (!value) return null;
   const normalized = value.toLowerCase();
 
-  if (normalized.includes('doble entrada')) return 'doble entrada';
-  if (normalized.includes('doble salida')) return 'doble salida';
-  if (normalized.includes('salida faltante')) return 'salida faltante';
-  if (normalized.includes('entrada faltante')) return 'entrada faltante';
-  if (normalized.includes('tipo dat')) return 'tipo DAT no reconocido';
-  if (normalized.includes('orden horario')) return 'orden horario inválido';
-  if (normalized.includes('entrada sin salida')) return 'salida faltante';
-  if (normalized.includes('salida antes')) return 'entrada faltante inicial';
+  if (normalized.includes('doble entrada')) return 'Doble entrada';
+  if (normalized.includes('doble salida')) return 'Doble salida';
+  if (normalized.includes('salida faltante')) return 'Salida faltante';
+  if (normalized.includes('entrada faltante')) return 'Entrada faltante';
+  if (normalized.includes('orden horario')) return 'Orden horario inválido';
+  if (normalized.includes('entrada sin salida')) return 'Salida faltante';
+  if (normalized.includes('salida antes')) return 'Entrada faltante inicial';
 
   return value;
 }
@@ -420,7 +418,6 @@ function statusCodeFromLabel(label) {
   if (normalized.includes('doble salida')) return 'doble-salida';
   if (normalized.includes('salida faltante')) return 'salida-faltante';
   if (normalized.includes('entrada faltante')) return 'entrada-faltante';
-  if (normalized.includes('tipo dat')) return 'tipo-dat-no-reconocido';
   if (normalized.includes('no laborable')) return 'no-laborable';
   return 'sin-registro';
 }

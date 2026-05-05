@@ -233,6 +233,26 @@ function formatClock(value) {
   return text ? text.slice(0, 5) : 'N/D';
 }
 
+function containsTipoDatText(value = '') {
+  const normalized = String(value || '').toLowerCase();
+  return normalized.includes('tipo') && normalized.includes('dat');
+}
+
+function sanitizeTipoDatText(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (!containsTipoDatText(text)) return text;
+
+  const cleaned = text
+    .split(/(?<=[.!?])\s+|\s*[|·]\s*/)
+    .map((piece) => piece.trim())
+    .filter((piece) => piece && !containsTipoDatText(piece))
+    .join(' ')
+    .trim();
+
+  return cleaned;
+}
+
 function dayCellClass(day) {
   const classes = ['day-cell', 'day-flip'];
   if (day.dailyStatusCode) classes.push(day.dailyStatusCode);
@@ -260,7 +280,6 @@ function compactDayStatusLabel(label = '') {
   if (normalized.includes('doble salida')) return 'Doble salida';
   if (normalized.includes('salida faltante')) return 'Salida faltante';
   if (normalized.includes('entrada faltante')) return 'Entrada faltante';
-  if (normalized.includes('tipo dat')) return 'DAT inválido';
   if (normalized.includes('no laborable')) return 'No laborable';
   if (normalized.includes('sin registro')) return 'Sin registro';
   return String(label || 'Estado').trim();
@@ -268,11 +287,15 @@ function compactDayStatusLabel(label = '') {
 
 function renderEventTimeline(events = []) {
   if (!events.length) return '<span class="day-event-empty">Sin marcajes registrados</span>';
-  return events.map((event) => `
-    <span class="day-event-pill ${escapeHtml(event.eventType || 'unknown')}">
-      ${escapeHtml(event.displayTime || formatClock(event.eventTime))} · ${escapeHtml(event.eventLabel || 'Tipo DAT no reconocido')}
-    </span>
-  `).join('');
+  return events.map((event) => {
+    const label = sanitizeTipoDatText(event.eventLabel || '');
+    const shouldShowLabel = label && label !== 'Registro';
+    return `
+      <span class="day-event-pill ${escapeHtml(event.eventType || 'unknown')}">
+        ${escapeHtml(event.displayTime || formatClock(event.eventTime))}${shouldShowLabel ? ` · ${escapeHtml(label)}` : ''}
+      </span>
+    `;
+  }).join('');
 }
 
 
@@ -284,7 +307,6 @@ function primaryDayStatus(statusLabel = '') {
   if (normalized.includes('doble salida')) return 'Doble salida';
   if (normalized.includes('salida faltante')) return 'Salida faltante';
   if (normalized.includes('entrada faltante')) return 'Entrada faltante';
-  if (normalized.includes('tipo dat')) return 'Tipo DAT no reconocido';
   if (normalized.includes('no laborable')) return 'No laborable';
   if (normalized.includes('sin registro')) return 'Sin registro';
   return String(statusLabel || 'Estado').trim();
@@ -298,6 +320,7 @@ function compactIncidentText(day, statusLabel = '') {
   ]
     .map((item) => String(item || '').trim())
     .filter(Boolean)
+    .filter((item) => !containsTipoDatText(item))
     .filter((item) => !['Ingreso completado', 'Ingreso incompleto', 'Completado con inconsistencia'].includes(item));
 
   const unique = [...new Set(pieces)];
@@ -327,11 +350,13 @@ function renderDetailRow(label, value) {
 }
 
 function renderDayCard(day) {
-  const statusLabel = dayStatusLabel(day);
+  const rawStatusLabel = dayStatusLabel(day);
+  const statusLabel = sanitizeTipoDatText(rawStatusLabel) || (day.eventCount ? 'Ingreso completado' : 'Sin registro');
   const compactStatus = compactDayStatusLabel(statusLabel);
   const mainStatus = primaryDayStatus(statusLabel);
   const incidentLabel = compactIncidentText(day, statusLabel);
-  const incident = day.dailyIncidentMessage || (day.eventCount ? '' : 'Sin marcajes registrados.');
+  const sanitizedIncident = sanitizeTipoDatText(day.dailyIncidentMessage || '');
+  const incident = sanitizedIncident || (day.eventCount ? '' : 'Sin marcajes registrados.');
   const hasVisibleIncident = Boolean(incidentLabel || (incident && day.eventCount));
 
   return `
@@ -409,24 +434,33 @@ function renderStudents() {
           <div class="progress-track"><div class="progress-fill" style="width:${barWidth}%"></div></div>
         </div>
         <div class="day-grid">${dayGrid}</div>
-        ${row.incidentSummary ? `<small class="alert">${escapeHtml(row.incidentSummary)}</small>` : ''}
+        ${sanitizeTipoDatText(row.incidentSummary) ? `<small class="alert">${escapeHtml(sanitizeTipoDatText(row.incidentSummary))}</small>` : ''}
       </article>
     `;
   }).join('');
 }
 
 function renderIncidents() {
-  if (!state.incidents.length) {
+  const visibleIncidents = (state.incidents || [])
+    .map((incident) => ({
+      ...incident,
+      type: sanitizeTipoDatText(incident.type),
+      message: sanitizeTipoDatText(incident.message)
+    }))
+    .filter((incident) => incident.type || incident.message)
+    .filter((incident) => !containsTipoDatText(incident.type) && !containsTipoDatText(incident.message));
+
+  if (!visibleIncidents.length) {
     incidentList.innerHTML = emptyState('verified', 'Sin incidencias', 'No se detectaron registros corruptos, pares incompletos, identificadores sin vínculo ni marcajes en días no laborables.');
     return;
   }
 
-  incidentList.innerHTML = state.incidents.map((incident) => `
+  incidentList.innerHTML = visibleIncidents.map((incident) => `
     <article class="incident-item">
       <span class="material-symbols-rounded">report</span>
       <div>
-        <strong>${escapeHtml(incident.type)} · ${escapeHtml(incident.priority)}</strong>
-        <p>${escapeHtml(incident.message)}</p>
+        <strong>${escapeHtml(incident.type || 'Incidencia')} · ${escapeHtml(incident.priority || 'Media')}</strong>
+        <p>${escapeHtml(incident.message || 'Se detectó una inconsistencia de registro.')}</p>
         <p>CVU: ${escapeHtml(incident.cvu || 'N/D')} · ID: ${escapeHtml(incident.checkerId || 'N/D')} · Fecha: ${escapeHtml(incident.date || 'N/D')}</p>
       </div>
     </article>
