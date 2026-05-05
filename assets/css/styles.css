@@ -1470,3 +1470,205 @@ body.student-mode .coordinator-only {
     flex-direction: column;
   }
 }
+
+/* Patch: contención real de tarjetas giradas sin desbordamiento visual */
+.day-grid {
+  grid-auto-rows: minmax(164px, auto);
+}
+
+.day-cell {
+  height: 164px;
+  min-height: 164px;
+  overflow: visible;
+}
+
+.day-card-inner,
+.day-card-face {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.day-card-face {
+  overflow: hidden;
+}
+
+.day-cell.is-flipped {
+  grid-column: span 2;
+  grid-row: span 2;
+  height: 352px;
+  min-height: 352px;
+  z-index: 6;
+}
+
+.day-cell.is-flipped .day-card-inner,
+.day-cell.is-flipped .day-card-face {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.day-cell.is-flipped .day-card-back {
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.9rem;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.day-card-front .day-card-head em {
+  max-width: 52%;
+  padding: 0.08rem 0.32rem;
+  font-size: 0.48rem;
+  line-height: 1;
+  text-align: right;
+}
+
+.day-card-head-back {
+  margin-bottom: 0.45rem;
+}
+
+.day-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+  min-width: 0;
+}
+
+.day-status-line strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.day-status-line mark {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.day-detail-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.36rem;
+  margin-bottom: 0.45rem;
+  min-width: 0;
+}
+
+.day-detail-row {
+  display: grid !important;
+  gap: 0.05rem;
+  min-width: 0;
+  padding: 0.34rem 0.42rem;
+  border: 1px solid rgba(219, 227, 242, 0.78);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.day-detail-row small {
+  color: var(--muted) !important;
+  font-size: 0.62rem !important;
+  line-height: 1.1 !important;
+  font-weight: 800;
+}
+
+.day-detail-row strong {
+  color: var(--text);
+  font-size: 0.76rem;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.day-cell.is-flipped .day-rule {
+  display: block;
+  margin: 0.3rem 0;
+  padding: 0.38rem 0.48rem;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 0.72rem !important;
+  line-height: 1.22 !important;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.day-cell.is-flipped .day-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-height: 4.9rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.12rem;
+  margin-top: 0.3rem;
+}
+
+.day-cell.is-flipped .day-event-pill,
+.day-cell.is-flipped .day-event-empty {
+  max-width: 100%;
+  font-size: 0.62rem !important;
+  line-height: 1.12 !important;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.day-cell.is-flipped .day-alert {
+  display: block;
+  margin-top: 0.45rem;
+  padding: 0.48rem 0.58rem;
+  border-radius: 12px;
+  background: var(--danger-soft);
+  color: var(--danger) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.22 !important;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.day-cell.is-flipped .day-card-back::-webkit-scrollbar,
+.day-cell.is-flipped .day-events::-webkit-scrollbar {
+  width: 0.42rem;
+}
+
+.day-cell.is-flipped .day-card-back::-webkit-scrollbar-thumb,
+.day-cell.is-flipped .day-events::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(64, 82, 128, 0.3);
+}
+
+.day-cell.is-flipped .day-card-back::-webkit-scrollbar-track,
+.day-cell.is-flipped .day-events::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (max-width: 1180px) {
+  .day-cell.is-flipped {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .day-cell.is-flipped {
+    grid-column: span 1;
+    grid-row: auto;
+    height: 420px;
+    min-height: 420px;
+  }
+
+  .day-cell.is-flipped .day-card-inner,
+  .day-cell.is-flipped .day-card-face {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+  }
+
+  .day-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

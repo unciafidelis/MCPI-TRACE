@@ -275,10 +275,64 @@ function renderEventTimeline(events = []) {
   `).join('');
 }
 
+
+function primaryDayStatus(statusLabel = '') {
+  const normalized = String(statusLabel || '').toLowerCase();
+  if (normalized.includes('ingreso incompleto')) return 'Ingreso incompleto';
+  if (normalized.includes('ingreso completado')) return 'Ingreso completado';
+  if (normalized.includes('doble entrada')) return 'Doble entrada';
+  if (normalized.includes('doble salida')) return 'Doble salida';
+  if (normalized.includes('salida faltante')) return 'Salida faltante';
+  if (normalized.includes('entrada faltante')) return 'Entrada faltante';
+  if (normalized.includes('tipo dat')) return 'Tipo DAT no reconocido';
+  if (normalized.includes('no laborable')) return 'No laborable';
+  if (normalized.includes('sin registro')) return 'Sin registro';
+  return String(statusLabel || 'Estado').trim();
+}
+
+function compactIncidentText(day, statusLabel = '') {
+  const pieces = [
+    day.dailyInconsistencyLabel,
+    day.dailyIncidentType,
+    String(statusLabel || '').includes('inconsistencia') ? String(statusLabel).split('inconsistencia:').pop() : ''
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .filter((item) => !['Ingreso completado', 'Ingreso incompleto', 'Completado con inconsistencia'].includes(item));
+
+  const unique = [...new Set(pieces)];
+  if (!unique.length) return '';
+  return unique.join(', ');
+}
+
+function compactCalculationRule(rule = '') {
+  const normalized = String(rule || '').toLowerCase();
+  if (normalized.includes('primer marcaje') && normalized.includes('último')) return 'Primer registro vs. último registro.';
+  if (normalized.includes('primera entrada') && normalized.includes('última salida')) return 'Primera entrada vs. última salida.';
+  if (normalized.includes('sin salida')) return 'Sin salida válida.';
+  if (normalized.includes('sin entrada')) return 'Sin entrada válida.';
+  if (normalized.includes('orden horario')) return 'Orden horario inválido.';
+  if (normalized.includes('sin registros')) return 'Sin registros.';
+  if (normalized.includes('sin par')) return 'Sin par interpretable.';
+  return String(rule || 'Sin regla aplicada.').trim();
+}
+
+function renderDetailRow(label, value) {
+  return `
+    <span class="day-detail-row">
+      <small>${escapeHtml(label)}</small>
+      <strong>${escapeHtml(value)}</strong>
+    </span>
+  `;
+}
+
 function renderDayCard(day) {
   const statusLabel = dayStatusLabel(day);
   const compactStatus = compactDayStatusLabel(statusLabel);
-  const incident = day.dailyIncidentMessage || (day.eventCount ? '' : 'No hay marcajes registrados para este día.');
+  const mainStatus = primaryDayStatus(statusLabel);
+  const incidentLabel = compactIncidentText(day, statusLabel);
+  const incident = day.dailyIncidentMessage || (day.eventCount ? '' : 'Sin marcajes registrados.');
+  const hasVisibleIncident = Boolean(incidentLabel || (incident && day.eventCount));
 
   return `
     <button type="button" class="${escapeHtml(dayCellClass(day))}" data-day-flip aria-pressed="false" aria-label="Ver detalle de ${escapeHtml(day.dayLabel)}">
@@ -292,25 +346,29 @@ function renderDayCard(day) {
           <span>Real: ${escapeHtml(minutesToReadable(day.realMinutes))}</span>
           <span>Meta: ${escapeHtml(minutesToReadable(day.expectedMinutes))}</span>
           ${day.isNonWorking ? `<mark>${escapeHtml(day.calendarLabel)}</mark>` : ''}
-          <i>Presiona para ver entrada/salida</i>
+          <i>Ver entrada/salida</i>
         </span>
         <span class="day-card-face day-card-back">
-          <span class="day-card-head">
+          <span class="day-card-head day-card-head-back">
             <strong>${escapeHtml(day.dayLabel)} · ${escapeHtml(formatDateShort(day.date))}</strong>
             <em>${escapeHtml(minutesToReadable(day.realMinutes))}</em>
           </span>
-          <small class="day-full-status">Estatus completo: ${escapeHtml(statusLabel)}</small>
-          <small>Tipo operativo: ${escapeHtml(day.dailyAttendanceType || statusLabel)}</small>
-          <small>Entrada real: ${escapeHtml(formatClock(day.entryTime))}</small>
-          <small>Salida real: ${escapeHtml(formatClock(day.exitTime))}</small>
-          <small>Horas registradas: ${escapeHtml(minutesToReadable(day.realMinutes))}</small>
-          <small>Horas base del día: ${escapeHtml(minutesToReadable(day.expectedMinutes))}</small>
-          <small>Marcajes del día: ${escapeHtml(day.eventCount || 0)}</small>
+          <span class="day-status-line">
+            <strong>${escapeHtml(mainStatus)}</strong>
+            ${incidentLabel ? `<mark>${escapeHtml(incidentLabel)}</mark>` : ''}
+          </span>
+          <span class="day-detail-grid">
+            ${renderDetailRow('Entrada', formatClock(day.entryTime))}
+            ${renderDetailRow('Salida', formatClock(day.exitTime))}
+            ${renderDetailRow('Real', minutesToReadable(day.realMinutes))}
+            ${renderDetailRow('Base', minutesToReadable(day.expectedMinutes))}
+            ${renderDetailRow('Marcajes', String(day.eventCount || 0))}
+            ${renderDetailRow('Tipo', day.dailyAttendanceType || mainStatus)}
+          </span>
           ${day.isNonWorking ? `<mark>${escapeHtml(day.calendarLabel)}</mark>` : ''}
-          ${day.dailyInconsistencyLabel ? `<mark>${escapeHtml(day.dailyInconsistencyLabel)}</mark>` : ''}
-          <span class="day-rule">${escapeHtml(day.calculationRule || 'Sin regla aplicada.')}</span>
+          <span class="day-rule">${escapeHtml(compactCalculationRule(day.calculationRule))}</span>
           <span class="day-events">${renderEventTimeline(day.events)}</span>
-          ${incident ? `<b class="day-alert">${escapeHtml(incident)}</b>` : ''}
+          ${hasVisibleIncident ? `<b class="day-alert">${escapeHtml(incident)}</b>` : ''}
         </span>
       </span>
     </button>
