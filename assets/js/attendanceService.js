@@ -13,40 +13,213 @@ import {
   weekdayKeyFromIso
 } from './utils.js';
 
-function calculatePairs(events) {
-  if (!events.length) return { minutes: 0, pairs: 0, incidentType: null, message: null };
+function formatClockTime(value) {
+  return String(value || '').slice(0, 5) || null;
+}
 
-  let minutes = 0;
-  let pairs = 0;
-  const messages = [];
+function eventTypeLabel(eventType) {
+  if (eventType === 'in') return 'Entrada';
+  if (eventType === 'out') return 'Salida';
+  return 'No identificado';
+}
 
-  for (let index = 0; index < events.length; index += 2) {
-    const start = events[index];
-    const end = events[index + 1];
+function emptyDailyAttendance() {
+  return {
+    minutes: 0,
+    incidentType: null,
+    message: null,
+    entryTime: null,
+    exitTime: null,
+    eventCount: 0,
+    events: [],
+    calculationRule: 'Sin registros del día.'
+  };
+}
 
-    if (!start || !end) {
-      messages.push('Número impar de marcajes.');
-      break;
-    }
+function normalizeDailyEvents(events) {
+  return [...events]
+    .sort((a, b) => a.eventTime.localeCompare(b.eventTime))
+    .map((event) => ({
+      checkerId: event.checkerId,
+      eventDate: event.eventDate,
+      eventTime: event.eventTime,
+      displayTime: formatClockTime(event.eventTime),
+      eventType: event.eventType || 'unknown',
+      eventLabel: eventTypeLabel(event.eventType),
+      sourceLine: event.sourceLine || null
+    }));
+}
 
-    const startMinutes = timeToMinutes(start.eventTime);
-    const endMinutes = timeToMinutes(end.eventTime);
+function hasConsecutiveType(events, eventType) {
+  return events.some((event, index) => index > 0 && event.eventType === eventType && events[index - 1].eventType === eventType);
+}
 
-    if (endMinutes <= startMinutes) {
-      messages.push('Secuencia horaria no interpretable.');
-      continue;
-    }
+function uniqueMessages(messages) {
+  return [...new Set(messages.filter(Boolean))];
+}
 
-    minutes += endMinutes - startMinutes;
-    pairs += 1;
+function buildDailyResult({ minutes = 0, incidentType = null, messages = [], entryEvent = null, exitEvent = null, events = [], calculationRule = '' }) {
+  const normalizedMessages = uniqueMessages(messages);
+  return {
+    minutes: Math.max(0, Math.round(minutes)),
+    incidentType: incidentType || (normalizedMessages.length ? 'Secuencia con ajuste' : null),
+    message: normalizedMessages.join(' '),
+    entryTime: entryEvent?.eventTime || null,
+    exitTime: exitEvent?.eventTime || null,
+    eventCount: events.length,
+    events,
+    calculationRule
+  };
+}
+
+function calculateUntypedDailyAttendance(events) {
+  if (events.length < 2) {
+    return buildDailyResult({
+      minutes: 0,
+      incidentType: 'Registro incompleto',
+      messages: ['Existe un solo marcaje sin tipo de entrada/salida; el día queda en 0 horas.'],
+      events,
+      calculationRule: 'Sin par entrada/salida interpretable.'
+    });
   }
 
-  return {
-    minutes,
-    pairs,
-    incidentType: messages.length ? 'Incompleto' : null,
-    message: messages.join(' ')
-  };
+  const firstEvent = events[0];
+  const lastEvent = events[events.length - 1];
+  const startMinutes = timeToMinutes(firstEvent.eventTime);
+  const endMinutes = timeToMinutes(lastEvent.eventTime);
+
+  if (endMinutes <= startMinutes) {
+    return buildDailyResult({
+      minutes: 0,
+      incidentType: 'Secuencia no interpretable',
+      messages: ['Los marcajes no tienen una salida posterior a la entrada asumida; el día queda en 0 horas.'],
+      entryEvent: firstEvent,
+      exitEvent: lastEvent,
+      events,
+      calculationRule: 'No fue posible inferir entrada y salida.'
+    });
+  }
+
+  return buildDailyResult({
+    minutes: endMinutes - startMinutes,
+    incidentType: 'Tipo no reconocido',
+    messages: ['El .dat no especifica entrada/salida; se asumió el primer registro como entrada y el último como salida.'],
+    entryEvent: firstEvent,
+    exitEvent: lastEvent,
+    events,
+    calculationRule: 'Primer marcaje del día contra último marcaje del día por falta de tipo explícito.'
+  });
+}
+
+function calculateDailyAttendance(dayEvents) {
+  const events = normalizeDailyEvents(dayEvents);
+  if (!events.length) return emptyDailyAttendance();
+
+  const typedEvents = events.filter((event) => ['in', 'out'].includes(event.eventType));
+  const unknownEvents = events.filter((event) => !['in', 'out'].includes(event.eventType));
+
+  if (!typedEvents.length) {
+    return calculateUntypedDailyAttendance(events);
+  }
+
+  const entries = typedEvents.filter((event) => event.eventType === 'in');
+  const exits = typedEvents.filter((event) => event.eventType === 'out');
+  const messages = [];
+
+  if (unknownEvents.length) {
+    messages.push('Hay marcajes con tipo no identificado; no se usaron para cerrar la jornada.');
+  }
+
+  if (hasConsecutiveType(typedEvents, 'in')) {
+    messages.push('Doble entrada consecutiva detectada.');
+  }
+
+  if (hasConsecutiveType(typedEvents, 'out')) {
+    messages.push('Doble salida consecutiva detectada.');
+  }
+
+  if (entries.length && exits.length) {
+    const firstEntry = entries[0];
+    const lastExit = exits[exits.length - 1];
+    const startMinutes = timeToMinutes(firstEntry.eventTime);
+    const endMinutes = timeToMinutes(lastExit.eventTime);
+
+    if (typedEvents[0].eventType === 'out') {
+      messages.push('Existe una salida antes de la primera entrada válida; se ignora para el conteo.');
+    }
+
+    if (typedEvents[typedEvents.length - 1].eventType === 'in') {
+      messages.push('Existe una entrada sin salida posterior; no se usa para cerrar la jornada.');
+    }
+
+    if (entries.length > 1) {
+      messages.push('Entradas múltiples: se considera la primera entrada registrada.');
+    }
+
+    if (exits.length > 1) {
+      messages.push('Salidas múltiples: se considera la última salida registrada.');
+    }
+
+    if (endMinutes <= startMinutes) {
+      return buildDailyResult({
+        minutes: 0,
+        incidentType: 'Secuencia no interpretable',
+        messages: [...messages, 'La última salida no es posterior a la primera entrada; el día queda en 0 horas.'],
+        entryEvent: firstEntry,
+        exitEvent: lastExit,
+        events,
+        calculationRule: 'Entrada y salida detectadas, pero con orden horario inválido.'
+      });
+    }
+
+    return buildDailyResult({
+      minutes: endMinutes - startMinutes,
+      incidentType: messages.length ? 'Secuencia con ajuste' : null,
+      messages,
+      entryEvent: firstEntry,
+      exitEvent: lastExit,
+      events,
+      calculationRule: 'Primera entrada real contra última salida real del día.'
+    });
+  }
+
+  if (entries.length) {
+    const isDoubleEntry = entries.length > 1;
+    return buildDailyResult({
+      minutes: 0,
+      incidentType: isDoubleEntry ? 'Doble entrada' : 'Omisión de salida',
+      messages: [
+        ...messages,
+        isDoubleEntry
+          ? 'Solo hay entradas registradas y no existe salida; el día queda en 0 horas.'
+          : 'Existe entrada registrada, pero se omitió la salida; el día queda en 0 horas.'
+      ],
+      entryEvent: entries[0],
+      exitEvent: null,
+      events,
+      calculationRule: 'Sin salida válida para cerrar la jornada.'
+    });
+  }
+
+  const isDoubleExit = exits.length > 1;
+  return buildDailyResult({
+    minutes: 0,
+    incidentType: isDoubleExit ? 'Doble salida' : 'Omisión de entrada',
+    messages: [
+      ...messages,
+      isDoubleExit
+        ? 'Solo hay salidas registradas y no existe entrada; el día queda en 0 horas.'
+        : 'Existe salida registrada, pero se omitió la entrada; el día queda en 0 horas.'
+    ],
+    entryEvent: null,
+    exitEvent: exits[exits.length - 1] || null,
+    events,
+    calculationRule: 'Sin entrada válida para abrir la jornada.'
+  });
+}
+
+function sumDailyExpectedMinutes(reference) {
+  return DAY_KEYS.reduce((sum, dayKey) => sum + (reference.week?.[dayKey] || 0), 0);
 }
 
 function buildStats(summaries, context = {}) {
@@ -129,6 +302,7 @@ function buildGlobalIncidents(parsedDat) {
 function buildMissingDatSummaries(referenceRows = [], hasDatFile = false) {
   return referenceRows.map((reference) => {
     const week = emptyWeek();
+    const baseExpectedTotalMinutes = sumDailyExpectedMinutes(reference);
     const dayDetails = DAY_KEYS.map((dayKey) => ({
       dayKey,
       dayLabel: DAY_LABELS[dayKey],
@@ -136,12 +310,19 @@ function buildMissingDatSummaries(referenceRows = [], hasDatFile = false) {
       baseExpectedMinutes: reference.week[dayKey] || 0,
       expectedMinutes: reference.week[dayKey] || 0,
       realMinutes: 0,
+      entryTime: null,
+      exitTime: null,
+      eventCount: 0,
+      events: [],
+      dailyIncidentType: null,
+      dailyIncidentMessage: null,
+      calculationRule: 'Sin registros del día.',
       isNonWorking: false,
       calendarType: null,
       calendarLabel: null
     }));
 
-    const status = reference.hasIssue ? 'Requiere revisión' : 'Sin DAT';
+    const status = 'Sin DAT';
     const message = hasDatFile
       ? 'El archivo .dat fue cargado, pero no contiene fechas reconocibles para construir una semana evaluable.'
       : 'Aún no se ha cargado un archivo .dat para evaluar la semana.';
@@ -150,10 +331,10 @@ function buildMissingDatSummaries(referenceRows = [], hasDatFile = false) {
       cvu: reference.cvu,
       checkerId: reference.checkerId,
       studentName: reference.studentName || 'Sin nombre',
-      expectedTotalMinutes: reference.expectedTotalMinutes,
-      baseExpectedTotalMinutes: reference.expectedTotalMinutes,
+      expectedTotalMinutes: baseExpectedTotalMinutes,
+      baseExpectedTotalMinutes,
       realTotalMinutes: 0,
-      varianceMinutes: -reference.expectedTotalMinutes,
+      varianceMinutes: -baseExpectedTotalMinutes,
       status,
       compliancePercent: 0,
       week,
@@ -162,10 +343,10 @@ function buildMissingDatSummaries(referenceRows = [], hasDatFile = false) {
       dayDetails,
       hasIncident: Boolean(reference.issueNotes || hasDatFile),
       incidentSummary: [message, reference.issueNotes || ''].filter(Boolean).join(' | '),
-      expectedLabel: minutesToReadable(reference.expectedTotalMinutes),
-      baseExpectedLabel: minutesToReadable(reference.expectedTotalMinutes),
+      expectedLabel: minutesToReadable(baseExpectedTotalMinutes),
+      baseExpectedLabel: minutesToReadable(baseExpectedTotalMinutes),
       realLabel: minutesToReadable(0),
-      varianceLabel: minutesToReadable(-reference.expectedTotalMinutes)
+      varianceLabel: minutesToReadable(-baseExpectedTotalMinutes)
     };
   });
 }
@@ -187,15 +368,18 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
   });
 
   const dailyByChecker = new Map();
+  const dailyDetailsByChecker = new Map();
   eventsByCheckerDate.forEach((dayEvents, key) => {
     const [checkerId, eventDate] = key.split('__');
-    const sortedEvents = dayEvents.sort((a, b) => a.eventTime.localeCompare(b.eventTime));
-    const result = calculatePairs(sortedEvents);
+    const result = calculateDailyAttendance(dayEvents);
 
     if (!dailyByChecker.has(checkerId)) dailyByChecker.set(checkerId, emptyWeek());
+    if (!dailyDetailsByChecker.has(checkerId)) dailyDetailsByChecker.set(checkerId, {});
+
     const dayKey = weekdayKeyFromIso(eventDate);
     if (DAY_KEYS.includes(dayKey)) {
-      dailyByChecker.get(checkerId)[dayKey] += result.minutes;
+      dailyByChecker.get(checkerId)[dayKey] = result.minutes;
+      dailyDetailsByChecker.get(checkerId)[dayKey] = result;
     }
 
     if (result.incidentType) {
@@ -206,7 +390,7 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
         checkerId,
         date: eventDate,
         message: result.message || 'Se detectó una incidencia en el cálculo diario.',
-        raw: sortedEvents.map((event) => `${event.eventDate} ${event.eventTime}`).join(' | ')
+        raw: result.events.map((event) => `${event.eventDate} ${event.displayTime || event.eventTime} ${event.eventLabel}`).join(' | ')
       });
     }
   });
@@ -229,13 +413,16 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
   let excludedExpectedMinutes = 0;
   const summaries = referenceRows.map((reference) => {
     const realWeek = dailyByChecker.get(reference.checkerId) || emptyWeek();
+    const realDailyDetails = dailyDetailsByChecker.get(reference.checkerId) || {};
+    const baseExpectedTotalMinutes = sumDailyExpectedMinutes(reference);
     const adjustedExpectedWeek = {};
     const dayDetails = DAY_KEYS.map((dayKey, index) => {
       const date = addDaysIso(weekStart, index);
       const calendarEntry = entryForDate(activeCalendarEntries, date);
       const baseExpectedMinutes = reference.week[dayKey] || 0;
       const expectedMinutes = calendarEntry ? 0 : baseExpectedMinutes;
-      const realMinutes = realWeek[dayKey] || 0;
+      const dailyResult = realDailyDetails[dayKey] || emptyDailyAttendance();
+      const realMinutes = dailyResult.minutes || 0;
       adjustedExpectedWeek[dayKey] = expectedMinutes;
       excludedExpectedMinutes += Math.max(baseExpectedMinutes - expectedMinutes, 0);
 
@@ -258,6 +445,13 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
         baseExpectedMinutes,
         expectedMinutes,
         realMinutes,
+        entryTime: dailyResult.entryTime || null,
+        exitTime: dailyResult.exitTime || null,
+        eventCount: dailyResult.eventCount || 0,
+        events: dailyResult.events || [],
+        dailyIncidentType: dailyResult.incidentType || null,
+        dailyIncidentMessage: dailyResult.message || null,
+        calculationRule: dailyResult.calculationRule || 'Sin registros del día.',
         isNonWorking: Boolean(calendarEntry),
         calendarType: calendarEntry?.type || null,
         calendarLabel: calendarEntry?.label || null
@@ -276,7 +470,7 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
     let status = 'Cumple';
     if (expectedTotalMinutes === 0) status = realTotalMinutes > 0 ? 'Requiere revisión' : 'Sin actividad';
     else if (!fileName) status = 'Sin DAT';
-    else if (reference.hasIssue || rowIncidents.length) status = 'Requiere revisión';
+    else if (rowIncidents.length) status = 'Requiere revisión';
     else if (varianceMinutes < 0) status = 'No cumple';
 
     return {
@@ -284,7 +478,7 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
       checkerId: reference.checkerId,
       studentName: reference.studentName || 'Sin nombre',
       expectedTotalMinutes,
-      baseExpectedTotalMinutes: reference.expectedTotalMinutes,
+      baseExpectedTotalMinutes,
       realTotalMinutes,
       varianceMinutes,
       status,
@@ -298,7 +492,7 @@ function buildWeekReport({ referenceRows, events, parsedDat, calendarEntries, we
       hasIncident: messages.length > 0,
       incidentSummary: messages.join(' | '),
       expectedLabel: minutesToReadable(expectedTotalMinutes),
-      baseExpectedLabel: minutesToReadable(reference.expectedTotalMinutes),
+      baseExpectedLabel: minutesToReadable(baseExpectedTotalMinutes),
       realLabel: minutesToReadable(realTotalMinutes),
       varianceLabel: minutesToReadable(varianceMinutes)
     };

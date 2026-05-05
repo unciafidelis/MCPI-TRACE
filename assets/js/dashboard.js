@@ -1,5 +1,4 @@
 import { CALENDAR_TYPES, DAY_LABELS, DEFAULT_STATE } from './constants.js';
-import { getSessionExpirationLabel, isSessionActive } from './authService.js';
 import { parseReferenceCsv } from './csvService.js';
 import { recomputeState, selectWeekFromStoredReports } from './attendanceService.js';
 import {
@@ -49,8 +48,7 @@ const calendarEnd = document.querySelector('#calendarEnd');
 const calendarLabel = document.querySelector('#calendarLabel');
 
 function assertSession() {
-  if (!isSessionActive(session)) {
-    clearSession();
+  if (!session?.role) {
     window.location.href = './index.html';
     return false;
   }
@@ -58,7 +56,7 @@ function assertSession() {
 }
 
 function isCoordinator() {
-  return isSessionActive(session) && session.role === 'coordinador';
+  return session?.role === 'coordinador';
 }
 
 function setResult(element, message, type = 'muted') {
@@ -80,7 +78,6 @@ function setView(viewName) {
 function initializeRoleMode() {
   document.body.classList.toggle('student-mode', !isCoordinator());
   roleBadge.textContent = isCoordinator() ? 'Coordinación' : 'Alumno';
-  roleBadge.title = `Sesión válida hasta ${getSessionExpirationLabel(session)}`;
   if (!isCoordinator()) setView('students');
 }
 
@@ -231,6 +228,70 @@ function renderWeekContext() {
   `;
 }
 
+function formatClock(value) {
+  const text = String(value || '').trim();
+  return text ? text.slice(0, 5) : 'N/D';
+}
+
+function dayCellClass(day) {
+  const classes = ['day-cell', 'day-flip'];
+  if (day.isNonWorking) classes.push('non-working');
+  if (day.dailyIncidentType) classes.push('has-incident');
+  if (!day.eventCount) classes.push('no-registers');
+  return classes.join(' ');
+}
+
+function dayStatusLabel(day) {
+  if (day.dailyIncidentType) return day.dailyIncidentType;
+  if (day.eventCount > 0) return 'Registro válido';
+  if (day.isNonWorking) return 'No laborable';
+  return 'Sin registro';
+}
+
+function renderEventTimeline(events = []) {
+  if (!events.length) return '<span class="day-event-empty">Sin marcajes registrados</span>';
+  return events.map((event) => `
+    <span class="day-event-pill ${escapeHtml(event.eventType || 'unknown')}">
+      ${escapeHtml(event.displayTime || formatClock(event.eventTime))} · ${escapeHtml(event.eventLabel || 'No identificado')}
+    </span>
+  `).join('');
+}
+
+function renderDayCard(day) {
+  const statusLabel = dayStatusLabel(day);
+  const incident = day.dailyIncidentMessage || (day.eventCount ? '' : 'No hay marcajes registrados para este día.');
+
+  return `
+    <button type="button" class="${escapeHtml(dayCellClass(day))}" data-day-flip aria-pressed="false" aria-label="Ver detalle de ${escapeHtml(day.dayLabel)}">
+      <span class="day-card-inner">
+        <span class="day-card-face day-card-front">
+          <span class="day-card-head">
+            <strong>${escapeHtml(day.dayLabel)}</strong>
+            <em>${escapeHtml(statusLabel)}</em>
+          </span>
+          <small>${escapeHtml(formatDateShort(day.date))}</small>
+          <span>Real: ${escapeHtml(minutesToReadable(day.realMinutes))}</span>
+          <span>Meta: ${escapeHtml(minutesToReadable(day.expectedMinutes))}</span>
+          ${day.isNonWorking ? `<mark>${escapeHtml(day.calendarLabel)}</mark>` : ''}
+          <i>Presiona para ver entrada/salida</i>
+        </span>
+        <span class="day-card-face day-card-back">
+          <span class="day-card-head">
+            <strong>Detalle real</strong>
+            <em>${escapeHtml(minutesToReadable(day.realMinutes))}</em>
+          </span>
+          <small>Entrada: ${escapeHtml(formatClock(day.entryTime))}</small>
+          <small>Salida: ${escapeHtml(formatClock(day.exitTime))}</small>
+          <small>Marcajes: ${escapeHtml(day.eventCount || 0)}</small>
+          <span class="day-rule">${escapeHtml(day.calculationRule || 'Sin regla aplicada.')}</span>
+          <span class="day-events">${renderEventTimeline(day.events)}</span>
+          ${incident ? `<b class="day-alert">${escapeHtml(incident)}</b>` : ''}
+        </span>
+      </span>
+    </button>
+  `;
+}
+
 function renderStudents() {
   const rows = getFilteredSummaries();
 
@@ -242,15 +303,7 @@ function renderStudents() {
   studentList.innerHTML = rows.map((row) => {
     const barWidth = Math.min(row.compliancePercent || 0, 100);
     const statusClass = cssStatus(row.status);
-    const dayGrid = (row.dayDetails || []).map((day) => `
-      <div class="day-cell ${day.isNonWorking ? 'non-working' : ''}">
-        <strong>${escapeHtml(day.dayLabel)}</strong>
-        <small>${escapeHtml(formatDateShort(day.date))}</small>
-        <span>Real: ${escapeHtml(minutesToReadable(day.realMinutes))}</span>
-        <span>Meta: ${escapeHtml(minutesToReadable(day.expectedMinutes))}</span>
-        ${day.isNonWorking ? `<em>${escapeHtml(day.calendarLabel)}</em>` : ''}
-      </div>
-    `).join('');
+    const dayGrid = (row.dayDetails || []).map((day) => renderDayCard(day)).join('');
 
     return `
       <article class="student-card">
@@ -264,12 +317,12 @@ function renderStudents() {
         <div class="student-meta">
           <span class="metric-chip">Horas: <strong>${escapeHtml(row.realLabel || minutesToReadable(row.realTotalMinutes))}</strong></span>
           <span class="metric-chip">Meta ajustada: <strong>${escapeHtml(row.expectedLabel || minutesToReadable(row.expectedTotalMinutes))}</strong></span>
-          <span class="metric-chip">Meta base: <strong>${escapeHtml(row.baseExpectedLabel || minutesToReadable(row.baseExpectedTotalMinutes))}</strong></span>
+          <span class="metric-chip">Meta base diaria: <strong>${escapeHtml(row.baseExpectedLabel || minutesToReadable(row.baseExpectedTotalMinutes))}</strong></span>
           <span class="metric-chip">Diferencia: <strong>${escapeHtml(row.varianceLabel || minutesToReadable(row.varianceMinutes))}</strong></span>
           <span class="metric-chip">Avance: <strong>${escapeHtml(row.compliancePercent)}%</strong></span>
         </div>
         <div>
-          <div class="progress-label"><span>Progreso semanal ajustado</span><strong>${escapeHtml(row.compliancePercent)}%</strong></div>
+          <div class="progress-label"><span>Progreso semanal según metas base por día</span><strong>${escapeHtml(row.compliancePercent)}%</strong></div>
           <div class="progress-track"><div class="progress-fill" style="width:${barWidth}%"></div></div>
         </div>
         <div class="day-grid">${dayGrid}</div>
@@ -552,6 +605,14 @@ function wireEvents() {
     const button = event.target.closest('[data-calendar-delete]');
     if (!button) return;
     deleteCalendarEntry(button.dataset.calendarDelete);
+  });
+
+  studentList?.addEventListener('click', (event) => {
+    const dayCard = event.target.closest('[data-day-flip]');
+    if (!dayCard) return;
+    const nextState = !dayCard.classList.contains('is-flipped');
+    dayCard.classList.toggle('is-flipped', nextState);
+    dayCard.setAttribute('aria-pressed', nextState ? 'true' : 'false');
   });
 
   searchInput?.addEventListener('input', renderStudents);
