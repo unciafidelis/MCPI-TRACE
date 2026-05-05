@@ -1129,7 +1129,10 @@ body.student-mode .coordinator-only {
 }
 
 .day-cell.is-flipped .day-card-back {
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .day-cell:focus-visible {
@@ -1152,6 +1155,8 @@ body.student-mode .coordinator-only {
   backface-visibility: hidden;
   overflow: hidden;
   box-shadow: 0 10px 24px rgba(14, 24, 51, 0.04);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .day-card-back {
@@ -1164,12 +1169,15 @@ body.student-mode .coordinator-only {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.4rem;
+  min-width: 0;
 }
 
 .day-card-head strong {
+  min-width: 0;
   color: var(--text);
   font-size: 0.88rem;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .day-card-head em {
@@ -1202,9 +1210,13 @@ body.student-mode .coordinator-only {
 .day-card-face i,
 .day-card-face mark,
 .day-card-face b {
+  min-width: 0;
+  max-width: 100%;
   color: var(--text-soft);
   font-size: 0.74rem;
   line-height: 1.28;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .day-card-face span:not(.day-card-head):not(.day-events):not(.day-event-pill) {
@@ -1288,6 +1300,22 @@ body.student-mode .coordinator-only {
 .day-cell.is-flipped .day-card-back {
   gap: 0.34rem;
   padding: 1rem;
+  max-height: 340px;
+  contain: paint;
+  scrollbar-gutter: stable both-edges;
+}
+
+.day-cell.is-flipped .day-card-back::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.day-cell.is-flipped .day-card-back::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(64, 82, 128, 0.28);
+}
+
+.day-cell.is-flipped .day-card-back::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .day-cell.is-flipped .day-card-face small,
@@ -1304,18 +1332,23 @@ body.student-mode .coordinator-only {
   flex-wrap: wrap;
   gap: 0.22rem;
   margin-top: 0.1rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .day-event-pill,
 .day-event-empty {
   display: inline-flex;
   width: fit-content;
+  max-width: 100%;
   border-radius: 999px;
   padding: 0.12rem 0.38rem;
   background: var(--surface-strong);
   color: var(--text-soft);
   font-size: 0.66rem;
   font-weight: 900;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .day-event-pill.in {
@@ -1423,6 +1456,10 @@ body.student-mode .coordinator-only {
   .day-cell.is-flipped .day-card-inner,
   .day-cell.is-flipped .day-card-face {
     min-height: 520px;
+  }
+
+  .day-cell.is-flipped .day-card-back {
+    max-height: 520px;
   }
 
   .week-picker {
